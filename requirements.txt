@@ -1,0 +1,5 @@
+pytube
+yt-dlp
+ffmpeg-python
+python-telegram-bot
+youtube-search-python
