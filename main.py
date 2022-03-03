@@ -63,7 +63,7 @@ def InlineQuery(update: Update, context: CallbackContext) -> None:
                         [
                             [
                                 InlineKeyboardButton(
-                                    "Use FFmpeg (Better audio)", callback_data=query
+                                    "Refine the audio with FFmpeg", callback_data=query
                                 )
                             ],
                             [
