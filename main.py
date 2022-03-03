@@ -1,6 +1,7 @@
 import os
 import ffmpeg
 import logging
+from io import BytesIO
 from uuid import uuid4
 from pytube import YouTube
 from telegram import (
@@ -10,7 +11,7 @@ from telegram import (
     InlineKeyboardButton,
     InlineQueryResultVideo,
     InputTextMessageContent,
-    InlineQueryResultDocument,
+    InlineQueryResultCachedAudio,
 )
 from telegram.ext import (
     Updater,
@@ -29,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def InlineQuery(update: Update, _: CallbackContext) -> None:
+def InlineQuery(update: Update, context: CallbackContext) -> None:
     query = update.inline_query.query
     if query == "":
         return
@@ -41,17 +42,36 @@ def InlineQuery(update: Update, _: CallbackContext) -> None:
             "https://youtu.be/",
         ]
     ):
+        link = query.replace(
+            "https://www.youtube.com/watch?v=", "https://youtu.be/")
+        audio = url(link, True)
+        message = context.bot.send_audio(
+            chat_id=5170164823,
+            audio=audio["audio"],
+            duration=audio["length"],
+            title=audio["title"],
+            filename=audio["title"],
+            performer=audio["artist"],
+            timeout=(5 * 60),
+        )
         update.inline_query.answer(
             [
-                InlineQueryResultDocument(
+                InlineQueryResultCachedAudio(
                     id=str(uuid4()),
-                    title="It's a promise!",
-                    document_url="https://drive.google.com/u/1/uc?id=13KSKdlfSriTitnezyEyJ9jHvkEld4_2F&export=download",
-                    mime_type="application/pdf",
-                    description="Click me to be able to recieve your audio :)",
-                    caption="Looks yummy doesn't it? Uwu",
+                    audio_file_id=message.audio.file_id,
                     reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("Get your audio", callback_data=query)]]
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "Use FFmpeg (Better audio)", callback_data=query
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "Naah I'm good", callback_data="End"
+                                )
+                            ],
+                        ]
                     ),
                 )
             ]
@@ -85,18 +105,16 @@ def InlineQuery(update: Update, _: CallbackContext) -> None:
 
 def Callback(update: Update, context: CallbackContext) -> None:
     update.callback_query.answer()
-    if any(
-        string in update.callback_query.data
-        for string in [
-            "https://music.youtube.com/",
-            "https://www.youtube.com/",
-            "https://youtu.be/",
-        ]
-    ):
+    if update.callback_query.data == "End":
+        context.bot.edit_message_reply_markup(
+            inline_message_id=update.callback_query.inline_message_id,
+            reply_markup=InlineKeyboardMarkup([]),
+        )
+    else:
         link = update.callback_query.data.replace(
             "https://www.youtube.com/watch?v=", "https://youtu.be/"
         )
-        audio = url(link)
+        audio = url(link, False)
         message = context.bot.send_audio(
             chat_id=5170164823,
             audio=audio["audio"],
@@ -112,13 +130,19 @@ def Callback(update: Update, context: CallbackContext) -> None:
         )
 
 
-def url(link):
+def url(link, type: bool):
     yt = YouTube(link)
-    mp3, _ = (
-        ffmpeg.input(yt.streams.get_audio_only().url)
-        .output("pipe:", format="mp3", acodec="libmp3lame")
-        .run(capture_stdout=True)
-    )
+    if type:
+        buffer = BytesIO()
+        yt.streams.get_audio_only().stream_to_buffer(buffer)
+        buffer.seek(0)
+        mp3 = buffer
+    else:
+        mp3, _ = (
+            ffmpeg.input(yt.streams.get_audio_only().url)
+            .output("pipe:", format="mp3", acodec="libmp3lame")
+            .run(capture_stdout=True)
+        )
     audio = {
         "audio": mp3,
         "title": yt.title,
